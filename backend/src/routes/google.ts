@@ -42,6 +42,7 @@ googleRouter.get('/auth-url', (req: AuthRequest, res: Response): void => {
 
 // 🔁 STEP 2: Google Callback (NO AUTH REQUIRED)
 googleRouter.get('/callback', async (req: Request, res: Response): Promise<void> => {
+  console.log("🔥 FRONTEND_URL:", process.env.FRONTEND_URL);
   const { code, state, error } = req.query;
   const frontend = process.env.FRONTEND_URL || 'http://localhost:5173';
 
