@@ -19,59 +19,145 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
+// 🔗 STEP 1: Generate Google Auth URL
 googleRouter.get('/auth-url', (req: AuthRequest, res: Response): void => {
-  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-  const state = Buffer.from(JSON.stringify({ userId: req.user.id })).toString('base64');
-  const url = oauthClient().generateAuthUrl({ access_type: 'offline', scope: SCOPES, state, prompt: 'consent' });
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const state = Buffer.from(
+    JSON.stringify({ userId: req.user.id })
+  ).toString('base64');
+
+  const url = oauthClient().generateAuthUrl({
+    access_type: 'offline',
+    scope: SCOPES,
+    state,
+    prompt: 'consent',
+  });
+
   res.json({ url });
 });
 
+// 🔁 STEP 2: Google Callback (NO AUTH REQUIRED)
 googleRouter.get('/callback', async (req: Request, res: Response): Promise<void> => {
   const { code, state, error } = req.query;
   const frontend = process.env.FRONTEND_URL || 'http://localhost:5173';
-  if (error || !code || !state) { res.redirect(`${frontend}/settings?google=error&reason=${error||'missing_params'}`); return; }
+
+  if (error || !code || !state) {
+    res.redirect(`${frontend}/settings?google=error&reason=${error || 'missing_params'}`);
+    return;
+  }
+
   try {
-    const { userId } = JSON.parse(Buffer.from(state as string, 'base64').toString());
+    // ✅ Extract userId from state (NOT req.user)
+    const { userId } = JSON.parse(
+      Buffer.from(state as string, 'base64').toString()
+    );
+
     const oauth2 = oauthClient();
+
     const { tokens } = await oauth2.getToken(code as string);
+
     if (!tokens.access_token) throw new Error('No access token');
+
     await supabase.from('google_tokens').upsert({
       user_id: userId,
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token || null,
-      expires_at: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : new Date(Date.now() + 3600000).toISOString(),
+      expires_at: tokens.expiry_date
+        ? new Date(tokens.expiry_date).toISOString()
+        : new Date(Date.now() + 3600000).toISOString(),
       scope: tokens.scope || null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
+
     res.redirect(`${frontend}?google=connected`);
   } catch (err) {
+    console.error('CALLBACK ERROR:', err);
     res.redirect(`${frontend}/settings?google=error&reason=token_exchange`);
   }
 });
 
+// 📊 STEP 3: Check connection status
 googleRouter.get('/status', async (req: AuthRequest, res: Response): Promise<void> => {
-  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
-  const { data } = await supabase.from('google_tokens').select('id,expires_at').eq('user_id', req.user.id).single();
-  res.json({ connected: !!data, expires_at: (data as any)?.expires_at || null });
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const { data } = await supabase
+    .from('google_tokens')
+    .select('id,expires_at')
+    .eq('user_id', req.user.id)
+    .single();
+
+  res.json({
+    connected: !!data,
+    expires_at: (data as any)?.expires_at || null,
+  });
 });
 
+// ❌ Disconnect Google
 googleRouter.delete('/disconnect', async (req: AuthRequest, res: Response): Promise<void> => {
-  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
   await supabase.from('google_tokens').delete().eq('user_id', req.user.id);
+
   res.json({ success: true });
 });
 
+// 📄 STEP 4: Create Google Doc
 googleRouter.post('/create-doc', async (req: AuthRequest, res: Response): Promise<void> => {
-  if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
   const { document_id } = req.body;
-  if (!document_id) { res.status(400).json({ error: 'document_id required' }); return; }
 
-  const { data: doc } = await supabase.from('documents').select('*').eq('id', document_id).single();
-  if (!doc || doc.firm_id !== req.profile?.firm_id) { res.status(403).json({ error: 'Forbidden' }); return; }
-  if (!doc.content) { res.status(400).json({ error: 'Document has no content' }); return; }
+  if (!document_id) {
+    res.status(400).json({ error: 'document_id required' });
+    return;
+  }
 
-  const { data: tokenRow } = await supabase.from('google_tokens').select('*').eq('user_id', req.user.id).single();
-  if (!tokenRow) { res.status(400).json({ error: 'Google not connected. Please connect in Settings.' }); return; }
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('id', document_id)
+    .single();
+
+  if (!doc || doc.firm_id !== req.profile?.firm_id) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+
+  if (!doc.content) {
+    res.status(400).json({ error: 'Document has no content' });
+    return;
+  }
+
+  const { data: tokenRow } = await supabase
+    .from('google_tokens')
+    .select('*')
+    .eq('user_id', req.user.id)
+    .single();
+
+  if (!tokenRow) {
+    res.status(400).json({ error: 'Google not connected' });
+    return;
+  }
+
+  if (!(tokenRow as any).refresh_token) {
+    res.status(400).json({
+      error: 'Missing refresh token. Please reconnect Google account.',
+    });
+    return;
+  }
 
   try {
     const oauth2 = oauthClient();
@@ -81,55 +167,93 @@ googleRouter.post('/create-doc', async (req: AuthRequest, res: Response): Promis
       refresh_token: (tokenRow as any).refresh_token,
     });
 
-    //  AUTO REFRESH TOKEN (THIS IS WHAT YOU WERE MISSING)
-    oauth2.on("tokens", async (tokens) => {
+    // 🔥 AUTO REFRESH TOKEN
+    oauth2.on('tokens', async (tokens) => {
       if (tokens.access_token) {
         await supabase
-          .from("google_tokens")
+          .from('google_tokens')
           .update({
             access_token: tokens.access_token,
             expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
             updated_at: new Date().toISOString(),
           })
-          .eq("user_id", req.user!.id);
+          .eq('user_id', req.user!.id);
       }
     });
-    if (!(tokenRow as any).refresh_token) {
-  res.status(400).json({ 
-    error: "Missing refresh token. Please reconnect Google account." 
-  });
-  return;
-}
+
     const docs = google.docs({ version: 'v1', auth: oauth2 });
     const drive = google.drive({ version: 'v3', auth: oauth2 });
-    // Create doc
-    const created = await docs.documents.create({ requestBody: { title: doc.title } });
+
+    // 📄 Create document
+    const created = await docs.documents.create({
+      requestBody: { title: doc.title },
+    });
+
     const docId = created.data.documentId!;
 
-    // Write content
-    await docs.documents.batchUpdate({ documentId: docId, requestBody: { requests: [{ insertText: { location: { index: 1 }, text: doc.content } }] } });
+    // ✍️ Insert content
+    await docs.documents.batchUpdate({
+      documentId: docId,
+      requestBody: {
+        requests: [
+          {
+            insertText: {
+              location: { index: 1 },
+              text: doc.content,
+            },
+          },
+        ],
+      },
+    });
 
-    // Create/find Wakili AI folder
+    // 📁 Create/find folder
     let folderId = '';
-    const folderRes = await drive.files.list({ q: "name='Wakili AI' and mimeType='application/vnd.google-apps.folder' and trashed=false", fields: 'files(id)' });
+
+    const folderRes = await drive.files.list({
+      q: "name='Wakili AI' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+      fields: 'files(id)',
+    });
+
     if (folderRes.data.files?.length) {
       folderId = folderRes.data.files[0].id!;
     } else {
-      const folder = await drive.files.create({ requestBody: { name: 'Wakili AI', mimeType: 'application/vnd.google-apps.folder' }, fields: 'id' });
+      const folder = await drive.files.create({
+        requestBody: {
+          name: 'Wakili AI',
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        fields: 'id',
+      });
       folderId = folder.data.id!;
     }
-    await drive.files.update({ fileId: docId, addParents: folderId, fields: 'id,parents' });
+
+    // Move file to folder
+    await drive.files.update({
+      fileId: docId,
+      addParents: folderId,
+      fields: 'id,parents',
+    });
 
     const docUrl = `https://docs.google.com/document/d/${docId}/edit`;
 
-    const { data: updated } = await supabase.from('documents').update({
-      google_doc_id: docId, google_doc_url: docUrl,
-      google_drive_id: docId, google_drive_url: `https://drive.google.com/file/d/${docId}/view`,
-      google_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-    }).eq('id', document_id).select().single();
+    const { data: updated } = await supabase
+      .from('documents')
+      .update({
+        google_doc_id: docId,
+        google_doc_url: docUrl,
+        google_drive_id: docId,
+        google_drive_url: `https://drive.google.com/file/d/${docId}/view`,
+        google_synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', document_id)
+      .select()
+      .single();
 
     res.json({ document: updated, doc_url: docUrl });
+
   } catch (err: any) {
+    console.error('CREATE DOC ERROR:', err);
     res.status(500).json({ error: err.message });
   }
 });
