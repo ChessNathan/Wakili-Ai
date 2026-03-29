@@ -639,7 +639,7 @@ export function DrafterPage() {
 
               {/* ── PREVIEW VIEW ── */}
               {view === 'preview' && (
-                <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--shadow-sm)', animation: 'fadeUp 0.25s ease' }}>
+                <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14,  boxShadow: 'var(--shadow-sm)', animation: 'fadeUp 0.25s ease' }}>
 
                   {/* Toolbar */}
                   <div style={{ padding: '11px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
