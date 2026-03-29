@@ -364,7 +364,7 @@ export function DrafterPage() {
   }, [fid]);
 
   async function generate() {
-    if (!prompt.trim() || !fid) return;
+    if (!fid) return;
     setLoading(true); setError(''); setDoc(null); setView('preview');
     try {
       const res = await api.ai.draft({ prompt, doc_type: docType, title: title || undefined, case_id: caseId || undefined });
@@ -372,6 +372,15 @@ export function DrafterPage() {
       setRecent(prev => [res.document, ...prev.slice(0, 11)]);
     } catch (e: any) { setError(e.message); setView('generate'); }
     finally { setLoading(false); }
+     if (!prompt.trim()) {
+    setError("Please describe the matter before generating.");
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+  setDoc(null);
+  setView('preview');
   }
 
   async function refine() {
@@ -594,10 +603,19 @@ export function DrafterPage() {
 
                     {error && <div style={{ marginBottom: 12 }}><Alert type="error" message={error} /></div>}
 
-                    <Button variant="gold" size="lg" loading={loading} onClick={generate} disabled={!prompt.trim()}
-                      leftIcon={<Sparkles size={17} />} style={{ width: '100%' }}>
-                      {loading ? 'Generating document…' : 'Generate Document'}
-                    </Button>
+                    
+                    <Button  variant="gold"
+  size="lg"
+  loading={loading}
+  onClick={generate}
+  disabled={loading}
+  style={{
+    width: '100%',
+    background: '#16a34a',
+    color: '#fff',
+    fontWeight: '700'
+  }}
+></Button>
                   </div>
                 </div>
               )}
