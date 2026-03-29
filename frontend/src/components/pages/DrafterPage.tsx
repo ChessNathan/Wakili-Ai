@@ -363,16 +363,12 @@ export function DrafterPage() {
     api.google.status().then(s => setGoogleStatus(s.connected)).catch(() => setGoogleStatus(false));
   }, [fid]);
 
-  async function generate() {
-    if (!fid) return;
-    setLoading(true); setError(''); setDoc(null); setView('preview');
-    try {
-      const res = await api.ai.draft({ prompt, doc_type: docType, title: title || undefined, case_id: caseId || undefined });
-      setDoc(res.document);
-      setRecent(prev => [res.document, ...prev.slice(0, 11)]);
-    } catch (e: any) { setError(e.message); setView('generate'); }
-    finally { setLoading(false); }
-     if (!prompt.trim()) {
+ 
+    async function generate() {
+  if (!fid) return;
+
+  // ✅ Validate FIRST
+  if (!prompt.trim()) {
     setError("Please describe the matter before generating.");
     return;
   }
@@ -381,8 +377,24 @@ export function DrafterPage() {
   setError('');
   setDoc(null);
   setView('preview');
-  }
 
+  try {
+    const res = await api.ai.draft({
+      prompt,
+      doc_type: docType,
+      title: title || undefined,
+      case_id: caseId || undefined
+    });
+
+    setDoc(res.document);
+    setRecent(prev => [res.document, ...prev.slice(0, 11)]);
+  } catch (e: any) {
+    setError(e.message);
+    setView('generate');
+  } finally {
+    setLoading(false);
+  }
+}
   async function refine() {
     if (!doc || !instruction.trim()) return;
     setRefining(true);
@@ -605,15 +617,14 @@ export function DrafterPage() {
 
                     
                     <div style={{ marginTop: 'auto' }}>
-  <Button
-    variant="gold"
+  <Button variant="gold"
     size="lg"
     loading={loading}
     onClick={generate}
     leftIcon={<Sparkles size={17} />}
     style={{ width: '100%' }}
   >
-    {loading ? 'Generating document…' : 'Generate Document'}
+    {loading ? 'Generating document…' : 'Generate Document'} Generate Document
   </Button>
 </div>
                   </div>
