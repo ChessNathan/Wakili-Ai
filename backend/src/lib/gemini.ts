@@ -41,7 +41,7 @@ export const DOC_PROMPTS: Record<DocType, string> = {
 export async function generateDocument(systemContext: string, userPrompt: string): Promise<string> {
   // Use gemini-1.5-flash with systemInstruction for proper separation of system vs user content
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: "gemini-pro",
     systemInstruction: systemContext,
     safetySettings: [
       { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
