@@ -630,7 +630,7 @@ export function DrafterPage() {
     leftIcon={<Sparkles size={17} />}
     style={{ width: '100%' }}
   >
-    {loading ? 'Generating document…' : 'Generate Document'} Generate Document
+    {loading ? 'Generating document…' : 'Generate Document'} 
   </Button>
 </div>
                   </div>
