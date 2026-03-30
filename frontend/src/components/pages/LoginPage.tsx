@@ -7,7 +7,7 @@ import { Alert, Spinner } from '../ui/UI';
 type Mode = 'login' | 'signup' | 'signup_staff';
 
 export function LoginPage() {
-  const { signIn, signUp, signUpStaff } = useAuth();
+  const { signIn, signUp, joinFirm } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
   const [mode, setMode]         = useState<Mode>('login');
@@ -64,7 +64,7 @@ export function LoginPage() {
       } else if (mode === 'signup') {
         await signUp(form.email, form.password, form.fullName, form.firmName);
       } else {
-        await signUpStaff(form.email, form.password, form.fullName, form.firmId, form.role);
+        await joinFirm(form.email, form.password, form.fullName, form.firmId, form.role);
       }
       navigate('/dashboard');
     } catch (err: any) {
