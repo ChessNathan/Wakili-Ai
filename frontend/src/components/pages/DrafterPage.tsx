@@ -103,13 +103,7 @@ function DriveImportModal({ onClose, onImport }: { onClose: () => void; onImport
               <Spinner size={22} /> <span style={{ color: 'var(--muted)', fontSize: 14 }}>Loading your Drive files…</span>
             </div>
           ) : files.length === 0 ? (
-            <div style={{ padding: '40px 24px', textAlign: 'center' }}>
-              <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 12 }}>No Google Docs found in your Drive.</div>
-              <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.7, maxWidth: 360, margin: '0 auto 16px' }}>
-                If you have docs in Drive but they're not showing, your Google connection may need to be refreshed with updated permissions.
-              </div>
-              <a href='/settings' style={{ fontSize: 13, color: 'var(--forest)', fontWeight: 600 }}>Go to Settings → Reconnect Google →</a>
-            </div>
+            <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>No Google Docs found.</div>
           ) : (
             <>
               {files.map(f => (
@@ -369,17 +363,38 @@ export function DrafterPage() {
     api.google.status().then(s => setGoogleStatus(s.connected)).catch(() => setGoogleStatus(false));
   }, [fid]);
 
-  async function generate() {
-    if (!prompt.trim() || !fid) return;
-    setLoading(true); setError(''); setDoc(null); setView('preview');
-    try {
-      const res = await api.ai.draft({ prompt, doc_type: docType, title: title || undefined, case_id: caseId || undefined });
-      setDoc(res.document);
-      setRecent(prev => [res.document, ...prev.slice(0, 11)]);
-    } catch (e: any) { setError(e.message); setView('generate'); }
-    finally { setLoading(false); }
+ 
+    async function generate() {
+  if (!fid) return;
+
+  // ✅ Validate FIRST
+  if (!prompt.trim()) {
+    setError("Please describe the matter before generating.");
+    return;
   }
 
+  setLoading(true);
+  setError('');
+  setDoc(null);
+  setView('preview');
+
+  try {
+    const res = await api.ai.draft({
+      prompt,
+      doc_type: docType,
+      title: title || undefined,
+      case_id: caseId || undefined
+    });
+
+    setDoc(res.document);
+    setRecent(prev => [res.document, ...prev.slice(0, 11)]);
+  } catch (e: any) {
+    setError(e.message);
+    setView('generate');
+  } finally {
+    setLoading(false);
+  }
+}
   async function refine() {
     if (!doc || !instruction.trim()) return;
     setRefining(true);
@@ -533,7 +548,7 @@ export function DrafterPage() {
 
               {/* ── GENERATE VIEW ── */}
               {view === 'generate' && (
-                <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+                <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 14,  boxShadow: 'var(--shadow-sm)' }}>
                   {/* Header */}
                   <div style={{ padding: '16px 22px', borderBottom: '1px solid var(--border)', background: 'var(--forest)', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(201,168,76,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -572,7 +587,13 @@ export function DrafterPage() {
                   </div>
 
                   {/* Form */}
-                  <div style={{ padding: '20px 22px' }}>
+                  <div style={{ 
+                          padding: '20px 22px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          height: '100%',
+                          overflowY: 'auto'   // ✅ ADD THIS
+                        }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14, marginBottom: 14 }}>
                       <div>
                         <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-2)', display: 'block', marginBottom: 5 }}>Title <span style={{ color: 'var(--muted)' }}>(optional)</span></label>
@@ -600,10 +621,18 @@ export function DrafterPage() {
 
                     {error && <div style={{ marginBottom: 12 }}><Alert type="error" message={error} /></div>}
 
-                    <Button variant="gold" size="lg" loading={loading} onClick={generate} disabled={!prompt.trim()}
-                      leftIcon={<Sparkles size={17} />} style={{ width: '100%' }}>
-                      {loading ? 'Generating document…' : 'Generate Document'}
-                    </Button>
+                    
+                    <div style={{ marginTop: 16  }}>
+  <Button variant="gold"
+    size="lg"
+    loading={loading}
+    onClick={generate}
+    leftIcon={<Sparkles size={17} />}
+    style={{ width: '100%' }}
+  >
+    {loading ? 'Generating document…' : 'Generate Document'} Generate Do
+  </Button>
+</div>
                   </div>
                 </div>
               )}
