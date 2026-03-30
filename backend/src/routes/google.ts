@@ -60,9 +60,9 @@ async function getOrCreateFolder(drive: any): Promise<string> {
 }
 
 const SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/documents',
-  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/drive',          // full Drive access — needed to list/read all user files
+  'https://www.googleapis.com/auth/documents',       // read/write Google Docs
+  'https://www.googleapis.com/auth/userinfo.email',  // identify the user
 ];
 
 // ── AUTH URL ────────────────────────────────────────────────
@@ -259,9 +259,12 @@ googleRouter.get('/drive-files', async (req: AuthRequest, res: Response): Promis
 
     const result = await driveApi.files.list({
       q,
-      fields: 'nextPageToken, files(id, name, modifiedTime, size, webViewLink)',
+      fields: 'nextPageToken, files(id, name, modifiedTime, webViewLink)',
       orderBy: 'modifiedTime desc',
-      pageSize: 20,
+      pageSize: 30,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true,
+      corpora: 'user',
       ...(pageToken ? { pageToken } : {}),
     });
 
@@ -295,6 +298,7 @@ googleRouter.post('/import-from-drive', async (req: AuthRequest, res: Response):
     const meta = await driveApi.files.get({
       fileId: google_doc_id,
       fields: 'id, name, webViewLink, modifiedTime',
+      supportsAllDrives: true,
     });
 
     // Get document content
