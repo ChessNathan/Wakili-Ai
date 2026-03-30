@@ -1,7 +1,31 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { logger } from './logger';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+if (!process.env.GEMINI_API_KEY) {
+  logger.error('GEMINI_API_KEY environment variable is not set');
+}
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+
+// Model priority list — tries each in order until one works
+const MODEL_CANDIDATES = [
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-pro',
+];
+
+const SAFETY = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+];
+
+const GEN_CONFIG = {
+  maxOutputTokens: 8192,
+  temperature: 0.3,
+  topP: 0.8,
+};
 
 export const SYSTEM_PROMPT = `You are Wakili AI, an expert legal drafting assistant for Kenyan law firms.
 
@@ -18,81 +42,90 @@ You have deep knowledge of:
 - Kenya Law Reports (eKLR) case precedents
 
 When drafting:
-1. Use proper Kenyan court formatting and citation styles
-2. Reference the correct court with proper cause number formats
-3. Include appropriate legal citations with section numbers
-4. Follow LSK professional standards
+1. Use proper Kenyan court formatting and cause number formats (e.g. HCCC No. 123 of 2025)
+2. Reference the correct court with proper jurisdiction
+3. Include appropriate legal citations with section/article numbers
+4. Follow LSK professional standards and ethics
 5. Use formal legal English appropriate for Kenyan courts
-6. Produce complete, court-ready documents
+6. Produce complete, court-ready documents with all required sections
 
 Never add disclaimers — you are drafting for qualified advocates.`;
 
 export type DocType = 'pleading' | 'contract' | 'demand_letter' | 'legal_opinion' | 'affidavit' | 'other';
 
 export const DOC_PROMPTS: Record<DocType, string> = {
-  pleading:      'Draft a complete court pleading ready for filing in the specified Kenyan court.',
-  contract:      'Draft a comprehensive contract governed by Kenyan law with all standard clauses.',
-  demand_letter: 'Draft a formal demand letter clearly stating the legal basis and relief sought.',
-  legal_opinion: 'Draft a detailed legal opinion memorandum citing relevant Kenyan statutes and case law.',
-  affidavit:     'Draft a complete sworn affidavit in proper Kenyan court format.',
-  other:         'Draft the requested legal document in proper Kenyan legal format.',
+  pleading:      'Draft a complete court pleading (plaint, petition, or application as appropriate) ready for filing. Include cause number, parties, facts, legal basis, and prayers.',
+  contract:      'Draft a comprehensive contract governed by Kenyan law with all standard clauses: definitions, obligations, payment terms, warranties, dispute resolution, and execution blocks.',
+  demand_letter: 'Draft a formal demand letter on law firm letterhead stating the demand, legal basis, deadline, and consequences of non-compliance.',
+  legal_opinion: 'Draft a detailed legal opinion memorandum with: Instructions Received, Brief Facts, Issues for Determination, The Law, Analysis, Conclusion, and Advice. Cite relevant Kenyan statutes and case law.',
+  affidavit:     'Draft a complete sworn affidavit in proper Kenyan court format with title, deponent details, numbered paragraphs, jurat, and commissioner for oaths block.',
+  other:         'Draft the requested legal document in proper Kenyan legal format with all required sections.',
 };
 
 export async function generateDocument(systemContext: string, userPrompt: string): Promise<string> {
-  // Use gemini-1.5-flash with systemInstruction for proper separation of system vs user content
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash-latest',
-    systemInstruction: systemContext,
-    safetySettings: [
-      { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    ],
-    generationConfig: {
-      maxOutputTokens: 8192,
-      temperature: 0.3,
-      topP: 0.8,
-    },
-  });
+  let lastError: Error | null = null;
 
-  try {
-    const result = await model.generateContent(userPrompt);
-    const response = result.response;
+  for (const modelName of MODEL_CANDIDATES) {
+    try {
+      logger.info('Trying Gemini model', { model: modelName });
 
-    // Check for safety blocks or empty response
-    const finishReason = response.candidates?.[0]?.finishReason;
-    if (finishReason === 'SAFETY') {
-      throw new Error('Content was blocked by safety filters. Please rephrase your request.');
-    }
-    if (finishReason === 'RECITATION') {
-      throw new Error('Content generation stopped due to recitation policy. Please rephrase.');
-    }
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: systemContext,
+        safetySettings: SAFETY,
+        generationConfig: GEN_CONFIG,
+      });
 
-    const text = response.text();
-    if (!text || text.trim().length === 0) {
-      throw new Error('AI returned an empty response. Please try again with more detail.');
-    }
+      const result   = await model.generateContent(userPrompt);
+      const response = result.response;
 
-    return text;
-  } catch (err: any) {
-    logger.error('Gemini generation error', {
-      message: err.message,
-      status:  err.status,
-      details: err.errorDetails,
-    });
+      const finishReason = response.candidates?.[0]?.finishReason;
+      if (finishReason === 'SAFETY') {
+        throw new Error('Content blocked by safety filters. Please rephrase your request.');
+      }
 
-    // Translate Gemini API errors into user-friendly messages
-    if (err.message?.includes('API_KEY_INVALID') || err.status === 400) {
-      throw new Error('AI service configuration error. Please check your Gemini API key.');
-    }
-    if (err.status === 429) {
-      throw new Error('AI rate limit reached. Please wait a moment and try again.');
-    }
-    if (err.status === 503 || err.message?.includes('overloaded')) {
-      throw new Error('AI service is temporarily busy. Please try again in a few seconds.');
-    }
+      const text = response.text();
+      if (!text || text.trim().length < 50) {
+        throw new Error('AI returned an empty or too-short response.');
+      }
 
-    // Re-throw with the actual message
-    throw new Error(err.message || 'AI document generation failed. Please try again.');
+      logger.info('Gemini generation success', { model: modelName, chars: text.length });
+      return text;
+
+    } catch (err: any) {
+      const msg: string = err.message || '';
+
+      // Model not found / not supported → try next
+      if (
+        msg.includes('404') ||
+        msg.includes('not found') ||
+        msg.includes('not supported') ||
+        msg.includes('deprecated')
+      ) {
+        logger.warn('Model not available, trying next', { model: modelName, error: msg });
+        lastError = err;
+        continue;
+      }
+
+      // Hard errors — no point retrying other models
+      if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+        throw new Error('Invalid Gemini API key. Check GEMINI_API_KEY in your Render environment variables.');
+      }
+      if (err.status === 429 || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+        throw new Error('Gemini API quota exceeded. Please wait a moment and try again.');
+      }
+      if (err.status === 503 || msg.includes('overloaded') || msg.includes('UNAVAILABLE')) {
+        throw new Error('Gemini AI is temporarily busy. Please try again in a few seconds.');
+      }
+
+      // Any other error — re-throw immediately
+      throw new Error(msg || 'AI document generation failed. Please try again.');
+    }
   }
+
+  // All models exhausted
+  throw new Error(
+    `No Gemini model is available. Last error: ${lastError?.message || 'unknown'}. ` +
+    'Check that your GEMINI_API_KEY is valid and has access to Gemini models.'
+  );
 }
