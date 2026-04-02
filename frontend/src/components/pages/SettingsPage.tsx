@@ -167,28 +167,8 @@ export function SettingsPage() {
               </div>
             </div>
 
-            {/* Setup guide
-            <div style={{ background:'#FFFBEB', border:'1px solid #FCD34D', borderRadius:14, padding:'20px 24px' }}>
-              <div style={{ fontSize:15, fontWeight:700, color:'#92400E', marginBottom:14, display:'flex', alignItems:'center', gap:8 }}>
-                <Settings size={16} />Google Cloud Console Setup
-              </div>
-              <ol style={{ fontSize:14, color:'var(--ink)', lineHeight:2.2, paddingLeft:20, margin:0 }}>
-                <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" style={{ color:'#1A73E8', fontWeight:500 }}>console.cloud.google.com</a> → New Project → <strong>Wakili AI</strong></li>
-                <li>APIs & Services → Enable <strong>Google Drive API</strong> and <strong>Google Docs API</strong></li>
-                <li>Credentials → Create <strong>OAuth 2.0 Client ID</strong> → Web Application</li>
-                <li>
-                  Add these <strong>Authorized Redirect URIs</strong> (both):
-                  <div style={{ marginTop:6, display:'flex', flexDirection:'column', gap:4 }}>
-                    <code style={{ background:'#FEF3C7', padding:'3px 10px', borderRadius:5, fontSize:13, display:'block' }}>https://your-backend.onrender.com/api/google/callback</code>
-                    <code style={{ background:'#FEF3C7', padding:'3px 10px', borderRadius:5, fontSize:13, display:'block' }}>http://localhost:3001/api/google/callback</code>
-                  </div>
-                </li>
-                <li>Add <strong>GOOGLE_CLIENT_ID</strong>, <strong>GOOGLE_CLIENT_SECRET</strong>, <strong>GOOGLE_REDIRECT_URI</strong> to Render env vars</li>
-                <li style={{ color:'#92400E', fontWeight:600 }}>⚠ The redirect URI in Render must EXACTLY match what's in Google Cloud Console — including no trailing slash</li>
-              </ol>
-            </div>
           </div>
-        )}*/}
+        )}
 
         {/* ── FIRM DETAILS ── */}
         {tab === 'firm' && (
